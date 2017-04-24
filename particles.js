@@ -1,5 +1,5 @@
-window.PARTICLES = {
-	specs: {
+PARTICLES = {
+	prototypes: {
 		empty : {
 			weight: 0,
 			empty: true,
@@ -39,6 +39,11 @@ window.PARTICLES = {
 					requirement: {air: 1},
 					probability: 0.01,
 					changeTo: 'vapor'
+				},
+				{
+					requirement: {magma: 1},
+					probability: 0.1,
+					changeTo: 'vapor'
 				}
 			]
 		},
@@ -73,7 +78,7 @@ window.PARTICLES = {
 				},
 				{
 					requirement: {magma: 1},
-					probability: 0.01,
+					probability: 0.05,
 					changeTo: 'sand'
 				}
 			]
@@ -129,34 +134,60 @@ window.PARTICLES = {
 		},
 		core: {
 			color: '#CF1020',
-			weight: 1000
+			weight: 1000,
+			liquid: true
 		}
 	},
+	constructors: {},
 	create: function(name){
-		var spec = this.specs[name];
-		if(!spec){
-			throw new Error('No such particle: ' + name);					
+		var proto = this.prototypes[name];
+		if(!proto){
+			throw new Error('No such particle: ' + name);
 		}
-		if(!spec.name){
-			spec.name = name;
-			if(spec.transitions){
-				spec.hasTransitionRequirements = false;
-				spec.transitions.forEach(function(t){
+		if(!proto.name){
+			proto.name = name;
+			if(proto.transitions){
+				proto.hasTransitionRequirements = false;
+				proto.transitions.forEach(function(t){
 					if(t.requirement){
-						spec.hasTransitionRequirements = true;
+						proto.hasTransitionRequirements = true;
 					}
 				});
 			}
+			this.constructors[name] = function(){
+				this.notMoved = 0;
+				this.wasSwapped = false;
+				this.active = true;
+				this.transitionPossible = false;
+			};
+			this.constructors[name].prototype = proto;
+		}		
+		return new this.constructors[name]();
+	},
+	ensureTypeArray: function(){
+		if(!this.types){
+			this.types = [];
+			for(var name in this.prototypes){
+				this.types.push(name);
+			}
 		}
-		var out = {};
-		for(var key in spec){
-			out[key] = spec[key];
-		}
-		out.notMoved = 0;
-		out.wasSwapped = false;
-		out.active = true;
-		out.transitionPossible = false;
-
-		return out;
-	}
+	},
+	toBytes: function(particle, bytes, offset){
+		this.ensureTypeArray();
+		bytes[offset] = this.types.indexOf(particle.name);
+		bytes[offset+1] = particle.notMoved;
+		bytes[offset+2] = particle.wasSwapped ? 1 : 0;
+		bytes[offset+3] = particle.active ? 1 : 0;
+		bytes[offset+4] = particle.transitionPossible ? 1 : 0;
+	},
+	fromBytes: function(bytes, offset){
+		this.ensureTypeArray();
+		var particle = this.create(this.types[bytes[offset]])
+		particle.notMoved 			= bytes[offset+1];		
+		particle.wasSwapped 		= bytes[offset+2] > 0;
+		particle.active 			= bytes[offset+3] > 0;
+		particle.transitionPossible = bytes[offset+4] > 0;
+		return particle;
+	},
+	byteSize: 5
 }
